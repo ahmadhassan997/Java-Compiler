@@ -1,28 +1,78 @@
 package lexer;
-import java.io.*; import java.util.*;
+
+import java.io.*; import java.util.*; import symbols.*;
+
 public class Lexer {
-    public int line = 1;
+    public static int line = 1;
     private char peek = ' ';
     private Hashtable<String, Word> words = new Hashtable<String, Word>();
+
     void reserve(Word t) {words.put(t.lexeme, t);}
+
     public Lexer() {
-        reserve(new Word(Tag.TRUE, "true"));
-        reserve(new Word(Tag.FALSE, "false"));
+        reserve(new Word("if", Tag.IF));
+        reserve(new Word("else", Tag.ELSE));
+        reserve(new Word("while", Tag.WHILE));
+        reserve(new Word("do", Tag.DO));
+        reserve(new Word("break", Tag.BREAK));
+        reserve(Word.True); 
+        reserve(Word.False);
+        reserve(Type.Int); 
+        reserve(Type.Char);
+        reserve(Type.Bool);
+        reserve(Type.Float);
     }
+    void readch() throws IOException {
+        this.peek = (char) System.in.read();
+    }
+
+    boolean readch(char composite) throws IOException {
+        readch();
+        if (this.peek != composite) return false;
+        this.peek = ' ';
+        return true;
+    }
+
     public Token scan() throws IOException {
-        for ( ; ; peek = (char) System.in.read()) {
+        for ( ;; readch()) {
             if (peek == ' ' || peek == '\t') continue;
             else if (peek == '\n') line = line + 1;
             else break;
         }
+
+        switch(peek) {
+            case '&':
+                if (readch('&')) return Word.and; else return new Token('&');
+            case '|':
+                if (readch('|')) return Word.or; else return new Token('|');
+            case '=':
+                if (readch('=')) return Word.eq; else return new Token('=');
+            case '!':
+                if (readch('=')) return Word.ne; else return new Token('!');
+            case '<':
+                if (readch('=')) return Word.le; else return new Token('<');
+            case '>':
+                if (readch('=')) return Word.ge; else return new Token('>');
+        }
+
         if (Character.isDigit(peek)) {
             int v = 0;
             do {
                 v = 10 * v + Character.digit(peek, 10);
-                peek = (char) System.in.read();
+                readch();
             } while (Character.isDigit(peek));
-            return new Num(v);
+            
+            if (this.peek != '.') return new Num(v);
+            float x = v, d = 10;
+            for (;;) {
+                readch();
+                if (!Character.isDigit(this.peek)) break;
+                x = x + Character.digit(this.peek, 10) / d;
+                d = d * 10;
+            }
+            return new Real(x);
         }
+
         if (Character.isLetter(peek)) {
             StringBuffer b = new StringBuffer();
             do {
@@ -32,10 +82,11 @@ public class Lexer {
             String s = b.toString();
             Word w = (Word) words.get(s);
             if (w != null) return w;
-            w = new Word(Tag.ID, s);
+            w = new Word(s, Tag.ID);
             reserve(w);
             return w;
         }
+
         Token t = new Token(peek);
         peek = ' ';
         return t;

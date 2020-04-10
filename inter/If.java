@@ -9,7 +9,7 @@ public class If extends Stmt {
     public If(Expr e, Stmt s) {
         this.expr = e;
         this.stmt = s;
-        if (expr.type != Type.Bool ) expr.error("Boolean Required in IF")
+        if (expr.type != Type.Bool ) expr.error("Boolean Required in IF");
     }
 
     public void gen(int b, int a) {

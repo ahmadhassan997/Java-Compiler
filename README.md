@@ -31,5 +31,5 @@ javac main/*.java
 To **test** the code:
 
 ``` bash
-java main.Main __inputfile__ __outputfile__
+java main.Main test/input test/output
 ```

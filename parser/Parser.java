@@ -90,12 +90,25 @@ public class Parser {
         }
     }
 
+    /**
+     * Differentiate between basic types and array types and return 
+     * appropriate types.
+     * @return Type
+     * @throws IOException
+     */
+
     Type type() throws IOException {
         Type p = (Type) look; // except for look.tag == Tag.BASIC
         match(Tag.BASIC);
         if ( look.tag != '[') return p; // T-> Basic
         else return dims(p); // return array type
     }
+
+    /**
+     * This procedure deals with the parsing for array access.
+     * @return Type
+     * @throws IOException
+     */
 
     Type dims(Type p) throws IOException {
        // match the pattern for an array access
@@ -131,7 +144,7 @@ public class Parser {
 
     Stmt stmt() throws IOException {
         Expr x;
-        Stmt s, s1, s2;
+        Stmt s1, s2;
         Stmt savedStmt; // save enclosing loop for breaks
         // check each case for tags
         switch( look.tag ){
@@ -144,12 +157,55 @@ public class Parser {
                 match('(');
                 x = bool();
                 match(')');
+                // get statement after boolen expression
+                s1 = stmt();
+                // check for IF or IF/ELSE
+                if ( look.tag != Tag.ELSE ) return new If(x, s1);
+                match(Tag.ELSE);
+                s2 = stmt();
+                return new Else(x, s1, s2);
+            case Tag.WHILE:
+                While whileNode = new While();
+                savedStmt = Stmt.Enclosing; // store previous Break statement
+                Stmt.Enclosing = whileNode;
+                // pattern matching for WHILE block
+                match(Tag.WHILE);
+                match('(');
+                x = bool();
+                match(')');
+                s1 = stmt();
+                whileNode.init(x, s1);
+                Stmt.Enclosing = savedStmt; // reset Stmt.Enclosing
+                return whileNode;
+            case Tag.DO:
+                Do doNode = new Do();
+                savedStmt = Stmt.Enclosing; // store previous Break statement
+                Stmt.Enclosing = doNode;
+                // pattern matching for DO block
+                match(Tag.DO);
+                s1 = stmt();
+                match(Tag.WHILE);
+                match('(');
+                x = bool();
+                match(')');
+                match(';');
+                doNode.init(s1, x);
+                Stmt.Enclosing = savedStmt; // reset Stmt.Enclosing
+                return doNode;
+            case Tag.BREAK:
+                match(Tag.BREAK);
+                match(';');
+                return new Break();
+            case '{':
+                return block();
+            default:
+                return assign();
         }
         
     }
 
     /**
-     * the code for assignments appears in this auxiliary procedure
+     * The code for assignments appears in this auxiliary procedure
      * @return return assignment statement
      * @throws IOException
      */
@@ -173,6 +229,13 @@ public class Parser {
         return stmt;
     }
 
+    /**
+     * This procedure deals with the parsing of boolean
+     * expressions and creates a syntax tree node.
+     * @return Expression
+     * @throws IOException
+     */
+
     Expr bool() throws IOException {
         Expr x = join();
         while( look.tag == Tag.OR ) {
@@ -182,6 +245,13 @@ public class Parser {
         }
         return x;
     }
+
+    /**
+     * This procedure deals with the parsing of boolean
+     * expressions and creates a syntax tree node.
+     * @return Expression
+     * @throws IOException
+     */
 
     Expr join() throws IOException {
         Expr x = equality();
@@ -193,6 +263,13 @@ public class Parser {
         return x;
     }
 
+    /**
+     * This procedure deals with the parsing of boolean
+     * expressions and creates a syntax tree node.
+     * @return Expression
+     * @throws IOException
+     */
+
     Expr equality() throws IOException {
         Expr x = rel();
         while ( look.tag == Tag.EQ || look.tag == Tag.NE ) {
@@ -202,6 +279,13 @@ public class Parser {
         }
         return x;
     }
+
+    /**
+     * This procedure deals with the parsing of boolean
+     * expressions and creates a syntax tree node.
+     * @return Expression
+     * @throws IOException
+     */
 
     Expr rel() throws IOException {
         Expr x = expr();
@@ -215,6 +299,13 @@ public class Parser {
         }
     }
 
+    /**
+     * This procedure deals with the parsing of arithmetic
+     * expressions and creates a syntax tree node.
+     * @return Expression
+     * @throws IOException
+     */
+
     Expr expr() throws IOException {
         Expr x = term();
         while ( look.tag == '+' || look.tag == '-') {
@@ -225,6 +316,13 @@ public class Parser {
         return x;
     }
 
+    /**
+     * This procedure deals with the parsing of arithmetic
+     * expressions and creates a syntax tree node.
+     * @return Expression
+     * @throws IOException
+     */
+
     Expr term() throws IOException {
         Expr x = unary();
         while ( look.tag == '*' || look.tag == '/') {
@@ -234,6 +332,13 @@ public class Parser {
         }
         return x;
     }
+
+    /**
+     * This procedure deals with the parsing of unary
+     * expressions and creates a syntax tree node.
+     * @return Expression
+     * @throws IOException
+     */
 
     Expr unary() throws IOException {
         if ( look.tag == '-') {
@@ -247,6 +352,12 @@ public class Parser {
         }
         else return factor();
     }
+
+    /**
+     * This procedure deals with "factors" in expressions.
+     * @return factored expression or basic tags
+     * @throws IOException
+     */
 
     Expr factor() throws IOException {
         Expr x = null;
@@ -276,7 +387,6 @@ public class Parser {
                 error("syntax error");
                 return x;
             case Tag.ID:
-                String s = look.toString();
                 Id id = top.get(look);
                 if ( id == null ) error(look.toString() + " undeclared");
                 move();
@@ -285,7 +395,38 @@ public class Parser {
         }
     }
 
+    /**
+     * The auxiliary procedure off set generates code for 
+     * array address calculations.
+     * @param a type of array
+     * @return new Access containing parsed array 
+     * @throws IOException
+     */
+
     Access offset(Id a) throws IOException {
-        return null;
+        Expr i, w;
+        Expr t1, t2;
+        Expr loc;
+        Type type = a.type;
+        // first index I -> [ E ]
+        match('[');
+        i = bool();
+        match(']');
+        type = ((Array)type).of;
+        w = new Constant(type.width);
+        t1 = new Arith(new Token('*'), i, w);
+        loc  = t1;
+        // multidimensional array I -> [ E ] I
+        while ( look.tag == '[' ) {
+            match('[');
+            i = bool();
+            match(']');
+            type = ((Array)type).of;
+            w = new Constant(type.width);
+            t1 = new Arith(new Token('*'), i, w);
+            t2 = new Arith(new Token('+'), loc, t1);
+            loc = t2;
+        }
+        return new Access(a, loc, type);
     }
 }

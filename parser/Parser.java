@@ -109,6 +109,183 @@ public class Parser {
     }
 
     Stmt stmts() throws IOException {
+        // return only when the statement block has ended 
+        if (look.tag == '}') return Stmt.Null;
+        // else return sequence of statements
+        else return new Seq(stmt(), stmts());
+    }
+
+    /**
+     * Procedure stmt has a switch statement with cases 
+     * corresponding to the productions for nonterminal Stmt.
+     * The nodes for while and do statements are constructed 
+     * when the parser sees the opening keyword.
+     * The nodes are constructed before the statement is parsed 
+     * to allow any enclosed break statement to point back to its 
+     * enclosing loop.
+     * Nested loops are handled by using variable Stmt. Enclosing in 
+     * class Stmt and savedStmt to maintain the current enclosing loop.
+     * @return statements
+     * @throws IOException
+     */
+
+    Stmt stmt() throws IOException {
+        Expr x;
+        Stmt s, s1, s2;
+        Stmt savedStmt; // save enclosing loop for breaks
+        // check each case for tags
+        switch( look.tag ){
+            case ';':
+                move();
+                return Stmt.Null;
+            case Tag.IF:
+                // pattern matching for IF block
+                match(Tag.IF);
+                match('(');
+                x = bool();
+                match(')');
+        }
+        
+    }
+
+    /**
+     * the code for assignments appears in this auxiliary procedure
+     * @return return assignment statement
+     * @throws IOException
+     */
+
+    Stmt assign() throws IOException {
+        Stmt stmt;
+        Token t = look;
+        match(Tag.ID);
+        Id id = top.get(t); // check previous declaration in symbol table
+        if ( id == null ) error(t.toString() + " undeclared");
+        if ( look.tag == '=') {
+            move();
+            stmt = new Set(id, bool());
+        }
+        else {
+            Access x = offset(id);
+            match('=');
+            stmt = new SetElem(x, bool());
+        }
+        match(';');
+        return stmt;
+    }
+
+    Expr bool() throws IOException {
+        Expr x = join();
+        while( look.tag == Tag.OR ) {
+            Token tok = look;
+            move();
+            x = new Or(tok, x, join());
+        }
+        return x;
+    }
+
+    Expr join() throws IOException {
+        Expr x = equality();
+        while ( look.tag == Tag.AND ) {
+            Token tok = look;
+            move();
+            x = new And(tok, x, equality());
+        }
+        return x;
+    }
+
+    Expr equality() throws IOException {
+        Expr x = rel();
+        while ( look.tag == Tag.EQ || look.tag == Tag.NE ) {
+            Token tok = look;
+            move();
+            x = new Rel(tok, x, rel());
+        }
+        return x;
+    }
+
+    Expr rel() throws IOException {
+        Expr x = expr();
+        switch (look.tag) {
+            case '<': case Tag.LE: case Tag.GE: case '>':
+                Token tok = look;
+                move();
+                return new Rel(tok, x, expr());
+            default:
+                return x;
+        }
+    }
+
+    Expr expr() throws IOException {
+        Expr x = term();
+        while ( look.tag == '+' || look.tag == '-') {
+            Token tok = look;
+            move();
+            x = new Arith(tok, x, term());
+        }
+        return x;
+    }
+
+    Expr term() throws IOException {
+        Expr x = unary();
+        while ( look.tag == '*' || look.tag == '/') {
+            Token tok = look;
+            move();
+            x = new Arith(tok, x, unary());
+        }
+        return x;
+    }
+
+    Expr unary() throws IOException {
+        if ( look.tag == '-') {
+            move();
+            return new Unary(Word.minus, unary());
+        }
+        else if ( look.tag == '!' ) {
+            Token tok = look;
+            move();
+            return new Not(tok, unary());
+        }
+        else return factor();
+    }
+
+    Expr factor() throws IOException {
+        Expr x = null;
+        switch ( look.tag ) {
+            case '(':
+                move();
+                x = bool();
+                match(')');
+                return x;
+            case Tag.NUM:
+                x = new Constant(look, Type.Int);
+                move();
+                return x;
+            case Tag.REAL:
+                x = new Constant(look, Type.Float);
+                move();
+                return x;
+            case Tag.TRUE:
+                x = Constant.True;
+                move();
+                return x;
+            case Tag.FALSE:
+                x = Constant.False;
+                move();
+                return x;
+            default:
+                error("syntax error");
+                return x;
+            case Tag.ID:
+                String s = look.toString();
+                Id id = top.get(look);
+                if ( id == null ) error(look.toString() + " undeclared");
+                move();
+                if ( look.tag != '[' ) return id;
+                else return offset(id);
+        }
+    }
+
+    Access offset(Id a) throws IOException {
         return null;
     }
 }
